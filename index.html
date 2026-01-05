@@ -1,0 +1,2351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Fichas CCE (+Firmas)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+    
+    <style>
+        :root {
+            --primary: #1e6f88;
+            --secondary: #3498db;
+            --bg-app: #f8fafc;
+            --bg-panel: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --recording: #ef4444;
+            --tab-active: #1e6f88;
+            --tab-inactive: #cbd5e1;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-app);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* --- LAYOUT --- */
+        .app-container { display: flex; width: 100%; height: 100%; }
+
+        .editor-panel {
+            width: 45%;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 1.5rem;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+        }
+
+        .preview-panel {
+            width: 55%;
+            background: #525659;
+            padding: 2rem;
+            overflow-y: auto;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+
+        .preview-fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
+            background: #525659;
+            padding: 20px;
+        }
+
+        h2 { margin-top: 0; font-weight: 600; color: var(--text-main); }
+        h3 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-top: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+
+        /* --- PESTAÑAS --- */
+        .tabs-container { display: flex; flex-direction: column; height: 100%; }
+
+        .tabs-header {
+            display: flex;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 1rem;
+            background: var(--bg-panel);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            padding-top: 5px;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            padding: 0.75rem 1rem;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            font-family: inherit;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .tab-btn:hover { color: var(--text-main); background: var(--bg-app); }
+        .tab-btn.active { color: var(--tab-active); border-bottom-color: var(--tab-active); background: var(--bg-app); }
+
+        .tab-content { flex: 1; overflow-y: auto; display: none; padding-bottom: 50px; }
+        .tab-content.active { display: block; }
+
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; font-size: 0.85rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--text-main); }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(30, 111, 136, 0.1); }
+
+        .row { display: flex; gap: 1rem; }
+        .col { flex: 1; }
+
+        .btn {
+            background: var(--primary); color: white; border: none; padding: 0.75rem 1.5rem;
+            border-radius: 6px; font-weight: 500; cursor: pointer; display: inline-flex;
+            align-items: center; gap: 0.5rem; transition: background 0.2s;
+        }
+        .btn:hover { background: #155d75; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+        .btn-outline:hover { background: var(--bg-app); }
+        .btn-danger { background: #ef4444; padding: 0.4rem; font-size: 0.8rem; color: white; border-radius: 4px; border:none; cursor: pointer;}
+        .btn-add { width: 100%; background: #f8fafc; border: 1px dashed var(--border); color: var(--primary); padding:10px; cursor: pointer;}
+        .btn-add:hover { background: #eff6ff; border-color: var(--primary); }
+
+        /* Estilos Micrófono */
+        .btn-mic {
+            background: transparent; color: var(--text-muted); border: 1px solid var(--border);
+            padding: 6px 12px; font-size: 0.8rem; border-radius: 4px; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 5px; margin-left: 10px;
+        }
+        .btn-mic:hover { background: #e2e8f0; color: var(--text-main); }
+        .btn-mic.recording { background-color: #fee2e2; color: var(--recording); border-color: var(--recording); animation: pulse-red 1.5s infinite; }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        /* ESTILOS FIRMA DIGITAL */
+        .signature-container {
+            border: 2px dashed #ccc;
+            background-color: #fff;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            height: 160px;
+            width: 100%;
+            position: relative;
+            touch-action: none; /* Vital para iPad */
+        }
+        .signature-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .signature-controls {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 20px;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .signature-options {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8fafc;
+            border-radius: 6px;
+            flex-wrap: wrap;
+        }
+
+        .signature-size-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: #f8fafc;
+            border-radius: 6px;
+        }
+
+        .signature-color-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid #ddd;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .signature-color-btn:hover { transform: scale(1.1); }
+        .signature-color-btn.active { border-color: #333; box-shadow: 0 0 5px rgba(0,0,0,0.3); }
+        .signature-color-black { background-color: #000; }
+        .signature-color-blue { background-color: #1e6f88; }
+
+        .signature-size-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .signature-size-btn:hover { background: #e2e8f0; }
+        .signature-size-btn.active { background: var(--primary); color: white; }
+
+        .font-size-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background: #f8fafc;
+            border-radius: 6px;
+        }
+
+        .font-size-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .font-size-buttons {
+            display: flex;
+            gap: 5px;
+        }
+
+        .font-size-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .font-size-btn:hover { background: #e2e8f0; }
+        .font-size-btn.active { background: var(--primary); color: white; }
+
+        .file-upload-wrapper { position: relative; overflow: hidden; display: inline-block; width: 100%; }
+        .file-upload-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; }
+        .btn-upload { background-color: #f1f5f9; color: #333; border: 1px solid #cbd5e1; width: 100%; text-align: center; justify-content: center; }
+        .btn-upload:hover { background-color: #e2e8f0; }
+
+        .list-item { display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 0.5rem; }
+        .dynamic-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.5rem; }
+        .interviewer-item { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px; background: #f8fafc; border-radius: 6px; }
+
+        /* --- PAPER DESIGN CORREGIDO --- */
+        .paper {
+            background: white; 
+            width: 210mm; 
+            min-height: 297mm; 
+            padding: 20mm;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
+            position: relative;
+            font-family: 'Arial', sans-serif; 
+            font-size: 11pt; 
+            line-height: 1.4; 
+            color: #000;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .paper-content {
+            max-height: 250mm;
+            overflow-y: auto;
+            padding-right: 5px;
+            box-sizing: border-box;
+        }
+
+        .paper-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .paper-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .paper-content::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+
+        .pdf-header { 
+            text-align: center; 
+            margin-bottom: 20px; 
+            border-bottom: 2px solid #000; 
+            padding-bottom: 10px; 
+            page-break-inside: avoid;
+        }
+        .pdf-title { 
+            text-align: center; 
+            font-weight: bold; 
+            font-size: 16pt; 
+            margin: 15px 0 5px 0; 
+            text-decoration: underline; 
+            page-break-inside: avoid;
+        }
+        .pdf-subtitle { 
+            text-align: center; 
+            font-weight: bold; 
+            font-size: 14pt; 
+            margin-bottom: 20px; 
+            page-break-inside: avoid;
+        }
+
+        .data-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-bottom: 20px; 
+            font-size: 11pt; 
+            page-break-inside: avoid;
+        }
+        .data-table td { 
+            border: 1px solid #000; 
+            padding: 8px 10px; 
+            vertical-align: top; 
+            page-break-inside: avoid;
+        }
+        .data-table .label-cell { 
+            font-weight: bold; 
+            background-color: #f0f0f0; 
+            width: 180px; 
+        }
+
+        .section-box { 
+            border: 1px solid #000; 
+            padding: 15px; 
+            margin-bottom: 20px; 
+            min-height: 120px; 
+            page-break-inside: avoid;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            hyphens: auto;
+            box-sizing: border-box;
+        }
+        .section-title { 
+            font-weight: bold; 
+            margin-bottom: 10px; 
+            display: block; 
+            text-decoration: underline; 
+        }
+
+        .signature-section { 
+            margin-top: 40px; 
+            page-break-inside: avoid; 
+        }
+        .signature-grid { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 40px; 
+            margin-top: 20px; 
+            page-break-inside: avoid;
+        }
+        .signature-box { 
+            border-top: 1px solid #000; 
+            padding-top: 10px; 
+            text-align: center; 
+            font-size: 10pt; 
+            min-height: 100px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center;
+            page-break-inside: avoid;
+            position: relative;
+            margin-top: 20px; /* Espacio extra para firmas grandes */
+        }
+        .signature-img-container {
+            position: absolute;
+            top: -40px; /* Posición sobre la línea, ajustada para firmas grandes */
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            z-index: 2;
+        }
+        .signature-img-preview {
+            max-height: 80px; /* Aumentado para firmas grandes */
+            max-width: 220px; /* Aumentado para firmas grandes */
+            display: block;
+            background: white;
+            padding: 0 15px; /* Más padding para firmas grandes */
+            transition: all 0.3s ease;
+        }
+        .signature-name {
+            margin-top: 45px; /* Aumentado para firmas grandes */
+            font-weight: bold;
+        }
+
+        .actions-bar { 
+            position: fixed; 
+            bottom: 20px; 
+            right: 40px; 
+            display: flex; 
+            gap: 10px; 
+            z-index: 100; 
+        }
+        .preview-logo { 
+            max-width: 100px; 
+            height: auto; 
+            margin-bottom: 10px; 
+            page-break-inside: avoid;
+        }
+
+        .fullscreen-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.9);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .fullscreen-btn:hover {
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .text-area-container {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
+        .text-area-controls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            display: flex;
+            gap: 5px;
+            z-index: 10;
+        }
+
+        /* Modal para ajustar tamaño de firma */
+        .signature-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .signature-modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+
+        .signature-modal-preview {
+            border: 2px solid #ddd;
+            margin: 1rem 0;
+            padding: 1rem;
+            text-align: center;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+
+        .modal-signature-img {
+            max-width: 100%;
+            max-height: 200px;
+            margin: 0 auto;
+            display: block;
+        }
+
+        .size-slider-container {
+            margin: 1.5rem 0;
+        }
+
+        .size-slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .size-value {
+            text-align: center;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+        }
+
+        /* Configuración de logo en servidor */
+        .logo-server-section {
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .logo-server-section h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: var(--text-main);
+        }
+
+        .logo-preview {
+            max-width: 150px;
+            height: auto;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            padding: 5px;
+            background: white;
+        }
+
+        .server-message {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            background: #f1f5f9;
+        }
+
+        .server-message.success {
+            color: #059669;
+            background: #d1fae5;
+        }
+
+        .server-message.error {
+            color: #dc2626;
+            background: #fee2e2;
+        }
+
+        .server-message.info {
+            color: #1e6f88;
+            background: #e0f2fe;
+        }
+
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            
+            .paper, .paper * {
+                visibility: visible;
+            }
+            
+            .paper {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 210mm;
+                height: 297mm;
+                margin: 0;
+                padding: 20mm;
+                box-shadow: none;
+                background: white;
+                overflow: visible;
+            }
+            
+            .paper-content {
+                max-height: none;
+                overflow: visible;
+                height: auto;
+            }
+            
+            .editor-panel, .actions-bar, .fullscreen-btn, .signature-modal { 
+                display: none !important; 
+            }
+            
+            .preview-panel { 
+                width: 100% !important; 
+                padding: 0 !important; 
+                background: white !important; 
+                display: block !important;
+                position: static !important;
+            }
+            
+            @page { 
+                size: A4 portrait;
+                margin: 20mm;
+            }
+            
+            .section-box {
+                min-height: auto;
+                overflow: visible;
+                page-break-inside: avoid;
+            }
+            
+            .signature-img-container {
+                position: absolute;
+                top: -40px;
+            }
+            
+            .signature-box {
+                margin-top: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <div class="editor-panel">
+            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+                <img id="editorLogo" src="https://via.placeholder.com/80x80?text=LOGO" alt="Logo" style="width: 50px; height: auto;">
+                <div>
+                    <h2 style="margin:0;">Fichas CCE + Firmas</h2>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">Colegio Nuestra Señora de las Mercedes</span>
+                </div>
+            </div>
+
+            <div class="tabs-container">
+                <div class="tabs-header">
+                    <button class="tab-btn active" onclick="switchTab('logo')">Logo</button>
+                    <button class="tab-btn" onclick="switchTab('estudiante')">Con Estudiante</button>
+                    <button class="tab-btn" onclick="switchTab('apoderado')">Con Apoderado</button>
+                    <button class="tab-btn" onclick="switchTab('docente')">Con Docente</button>
+                    <button class="tab-btn" onclick="switchTab('gestion')">Gestión</button>
+                </div>
+
+                <div id="tab-logo" class="tab-content active">
+                    <h3>Configuración Institucional</h3>
+                    
+                    <div class="form-group">
+                        <label>Logo del Colegio</label>
+                        <div class="file-upload-wrapper">
+                            <button class="btn btn-upload"><i class="fas fa-image"></i> Cargar Logo (PNG/JPG)</button>
+                            <input type="file" id="logoInput" accept="image/*" onchange="loadLogo(event)">
+                        </div>
+                    </div>
+                    
+                    <!-- Configuración de Logo en Servidor -->
+                    <div class="logo-server-section">
+                        <h4>Logo en Servidor (GitHub)</h4>
+                        <div id="serverLogoPreview" style="display: none;">
+                            <img id="serverLogoImg" class="logo-preview" alt="Logo del servidor">
+                        </div>
+                        <div id="noServerLogo" class="server-message info">
+                            No hay logo configurado en el servidor. Sube uno usando el botón arriba y luego haz clic en "Guardar en Servidor".
+                        </div>
+                        <div class="row" style="margin-top: 10px;">
+                            <div class="col">
+                                <button class="btn" onclick="saveLogoToServer()" id="saveToServerBtn">
+                                    <i class="fas fa-cloud-upload-alt"></i> Guardar en Servidor
+                                </button>
+                            </div>
+                            <div class="col">
+                                <button class="btn btn-outline" onclick="loadLogoFromServer()" id="loadFromServerBtn">
+                                    <i class="fas fa-cloud-download-alt"></i> Cargar desde Servidor
+                                </button>
+                            </div>
+                        </div>
+                        <div id="serverMessage" class="server-message" style="display: none;"></div>
+                        <div class="server-message info" style="margin-top: 10px; font-size: 0.7rem;">
+                            <strong>Nota:</strong> Para usar GitHub como servidor, necesitas:
+                            <ol style="margin: 5px 0 0 15px; padding-left: 10px;">
+                                <li>Crear un repositorio público en GitHub</li>
+                                <li>Crear un token de acceso personal (repo scope)</li>
+                                <li>Configurar en la pestaña "Gestión"</li>
+                            </ol>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Datos del Colegio</label>
+                        <input type="text" id="colegioNombre" value="Colegio Nuestra Señora de las Mercedes" oninput="updatePreview(); saveAllData();">
+                    </div>
+                    <div class="row">
+                        <div class="col form-group">
+                            <label>Dirección</label>
+                            <input type="text" id="colegioDireccion" value="Carlos Ibáñez 01181, Quilpué." oninput="updatePreview(); saveAllData();">
+                        </div>
+                        <div class="col form-group">
+                            <label>Teléfono</label>
+                            <input type="text" id="colegioTelefono" value="32-3172462" oninput="updatePreview(); saveAllData();">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Comité</label>
+                        <input type="text" id="comiteNombre" value="Comité de Convivencia Escolar" oninput="updatePreview(); saveAllData();">
+                    </div>
+                </div>
+
+                <div id="tab-estudiante" class="tab-content">
+                    <h3>FICHA ENTREVISTA CON ESTUDIANTE</h3>
+                    
+                    <div class="form-group">
+                        <label>Nombre Estudiante</label>
+                        <input type="text" id="estNombre" oninput="updatePreview(); saveAllData();">
+                    </div>
+                    <div class="row">
+                        <div class="col form-group">
+                            <label>Curso</label>
+                            <input type="text" id="estCurso" oninput="updatePreview(); saveAllData();">
+                        </div>
+                        <div class="col form-group">
+                            <label>Fecha (DD/MM/AAAA)</label>
+                            <input type="date" id="estFecha" oninput="updatePreview(); saveAllData();">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Entrevistador(es)</label>
+                        <div id="estEntrevistadoresList" class="dynamic-list"></div>
+                        <button class="btn btn-add" onclick="addEntrevistador('est')">+ Agregar Entrevistador</button>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Motivo de Entrevista</label>
+                        <div class="font-size-controls">
+                            <span class="font-size-label">Tamaño texto:</span>
+                            <div class="font-size-buttons">
+                                <button class="font-size-btn" data-size="0.8" onclick="setTextareaFontSize('estMotivo', 0.8)">S</button>
+                                <button class="font-size-btn active" data-size="1" onclick="setTextareaFontSize('estMotivo', 1)">M</button>
+                                <button class="font-size-btn" data-size="1.2" onclick="setTextareaFontSize('estMotivo', 1.2)">L</button>
+                                <button class="font-size-btn" data-size="1.4" onclick="setTextareaFontSize('estMotivo', 1.4)">XL</button>
+                            </div>
+                        </div>
+                        <div class="text-area-container">
+                            <textarea id="estMotivo" rows="6" oninput="updatePreview(); saveAllData();"></textarea>
+                            <div class="text-area-controls">
+                                <button class="btn-mic" onclick="toggleDictation(this, 'estMotivo')"><i class="fas fa-microphone"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Acuerdos</label>
+                        <div class="font-size-controls">
+                            <span class="font-size-label">Tamaño texto:</span>
+                            <div class="font-size-buttons">
+                                <button class="font-size-btn" data-size="0.8" onclick="setTextareaFontSize('estAcuerdos', 0.8)">S</button>
+                                <button class="font-size-btn active" data-size="1" onclick="setTextareaFontSize('estAcuerdos', 1)">M</button>
+                                <button class="font-size-btn" data-size="1.2" onclick="setTextareaFontSize('estAcuerdos', 1.2)">L</button>
+                                <button class="font-size-btn" data-size="1.4" onclick="setTextareaFontSize('estAcuerdos', 1.4)">XL</button>
+                            </div>
+                        </div>
+                        <div class="text-area-container">
+                            <textarea id="estAcuerdos" rows="6" oninput="updatePreview(); saveAllData();"></textarea>
+                            <div class="text-area-controls">
+                                <button class="btn-mic" onclick="toggleDictation(this, 'estAcuerdos')"><i class="fas fa-microphone"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="border-top: 2px solid #eee; padding-top: 20px; margin-top: 20px;">
+                        <h4 style="margin-bottom: 15px; color: var(--primary);">Firmas Digitales</h4>
+                        
+                        <div class="signature-options">
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Color de firma:</span>
+                            <button class="signature-color-btn signature-color-black active" onclick="setSignatureColor('est', 'black')" title="Negro"></button>
+                            <button class="signature-color-btn signature-color-blue" onclick="setSignatureColor('est', 'blue')" title="Azul"></button>
+                            <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 10px;">Grosor:</span>
+                            <select id="penWidth-est" onchange="setPenWidth('est', this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ddd;">
+                                <option value="0.5">Muy fino</option>
+                                <option value="1" selected>Fino</option>
+                                <option value="1.5">Normal</option>
+                                <option value="2">Grueso</option>
+                            </select>
+                        </div>
+
+                        <label>Firma Estudiante</label>
+                        <div class="signature-container">
+                            <canvas id="sig-est-entrevistado" class="signature-canvas"></canvas>
+                        </div>
+                        <div class="signature-controls">
+                            <button class="btn-outline" onclick="clearPad('est-entrevistado')"><i class="fas fa-eraser"></i> Borrar</button>
+                            <button class="btn-outline" onclick="adjustSignatureSize('est-entrevistado')"><i class="fas fa-expand-alt"></i> Ajustar Tamaño</button>
+                        </div>
+
+                        <label>Firma Entrevistador</label>
+                        <div class="signature-container">
+                            <canvas id="sig-est-entrevistador" class="signature-canvas"></canvas>
+                        </div>
+                        <div class="signature-controls">
+                            <button class="btn-outline" onclick="clearPad('est-entrevistador')"><i class="fas fa-eraser"></i> Borrar</button>
+                            <button class="btn-outline" onclick="adjustSignatureSize('est-entrevistador')"><i class="fas fa-expand-alt"></i> Ajustar Tamaño</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-apoderado" class="tab-content">
+                    <h3>FICHA ENTREVISTA CON APODERADO</h3>
+                    <div class="form-group">
+                        <label>Nombre Estudiante</label>
+                        <input type="text" id="apoEstNombre" oninput="updatePreview(); saveAllData();">
+                    </div>
+                    <div class="form-group">
+                        <label>Nombre Apoderado</label>
+                        <input type="text" id="apoNombre" oninput="updatePreview(); saveAllData();">
+                    </div>
+                    <div class="row">
+                        <div class="col form-group">
+                            <label>Curso</label>
+                            <input type="text" id="apoCurso" oninput="updatePreview(); saveAllData();">
+                        </div>
+                        <div class="col form-group">
+                            <label>Fecha (DD/MM/AAAA)</label>
+                            <input type="date" id="apoFecha" oninput="updatePreview(); saveAllData();">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Entrevistador(es)</label>
+                        <div id="apoEntrevistadoresList" class="dynamic-list"></div>
+                        <button class="btn btn-add" onclick="addEntrevistador('apo')">+ Agregar Entrevistador</button>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Motivo</label>
+                        <div class="font-size-controls">
+                            <span class="font-size-label">Tamaño texto:</span>
+                            <div class="font-size-buttons">
+                                <button class="font-size-btn" data-size="0.8" onclick="setTextareaFontSize('apoMotivo', 0.8)">S</button>
+                                <button class="font-size-btn active" data-size="1" onclick="setTextareaFontSize('apoMotivo', 1)">M</button>
+                                <button class="font-size-btn" data-size="1.2" onclick="setTextareaFontSize('apoMotivo', 1.2)">L</button>
+                                <button class="font-size-btn" data-size="1.4" onclick="setTextareaFontSize('apoMotivo', 1.4)">XL</button>
+                            </div>
+                        </div>
+                        <div class="text-area-container">
+                            <textarea id="apoMotivo" rows="5" oninput="updatePreview(); saveAllData();"></textarea>
+                            <div class="text-area-controls">
+                                <button class="btn-mic" onclick="toggleDictation(this, 'apoMotivo')"><i class="fas fa-microphone"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Acuerdos</label>
+                        <div class="font-size-controls">
+                            <span class="font-size-label">Tamaño texto:</span>
+                            <div class="font-size-buttons">
+                                <button class="font-size-btn" data-size="0.8" onclick="setTextareaFontSize('apoAcuerdos', 0.8)">S</button>
+                                <button class="font-size-btn active" data-size="1" onclick="setTextareaFontSize('apoAcuerdos', 1)">M</button>
+                                <button class="font-size-btn" data-size="1.2" onclick="setTextareaFontSize('apoAcuerdos', 1.2)">L</button>
+                                <button class="font-size-btn" data-size="1.4" onclick="setTextareaFontSize('apoAcuerdos', 1.4)">XL</button>
+                            </div>
+                        </div>
+                        <div class="text-area-container">
+                            <textarea id="apoAcuerdos" rows="5" oninput="updatePreview(); saveAllData();"></textarea>
+                            <div class="text-area-controls">
+                                <button class="btn-mic" onclick="toggleDictation(this, 'apoAcuerdos')"><i class="fas fa-microphone"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="border-top: 2px solid #eee; padding-top: 20px;">
+                        <h4 style="margin-bottom: 15px; color: var(--primary);">Firmas Digitales</h4>
+                        
+                        <div class="signature-options">
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Color de firma:</span>
+                            <button class="signature-color-btn signature-color-black active" onclick="setSignatureColor('apo', 'black')" title="Negro"></button>
+                            <button class="signature-color-btn signature-color-blue" onclick="setSignatureColor('apo', 'blue')" title="Azul"></button>
+                            <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 10px;">Grosor:</span>
+                            <select id="penWidth-apo" onchange="setPenWidth('apo', this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ddd;">
+                                <option value="0.5">Muy fino</option>
+                                <option value="1" selected>Fino</option>
+                                <option value="1.5">Normal</option>
+                                <option value="2">Grueso</option>
+                            </select>
+                        </div>
+                        
+                        <label>Firma Apoderado</label>
+                        <div class="signature-container">
+                            <canvas id="sig-apo-entrevistado" class="signature-canvas"></canvas>
+                        </div>
+                        <div class="signature-controls">
+                            <button class="btn-outline" onclick="clearPad('apo-entrevistado')"><i class="fas fa-eraser"></i> Borrar</button>
+                            <button class="btn-outline" onclick="adjustSignatureSize('apo-entrevistado')"><i class="fas fa-expand-alt"></i> Ajustar Tamaño</button>
+                        </div>
+
+                        <label>Firma Entrevistador</label>
+                        <div class="signature-container">
+                            <canvas id="sig-apo-entrevistador" class="signature-canvas"></canvas>
+                        </div>
+                        <div class="signature-controls">
+                            <button class="btn-outline" onclick="clearPad('apo-entrevistador')"><i class="fas fa-eraser"></i> Borrar</button>
+                            <button class="btn-outline" onclick="adjustSignatureSize('apo-entrevistador')"><i class="fas fa-expand-alt"></i> Ajustar Tamaño</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-docente" class="tab-content">
+                    <h3>FICHA ENTREVISTA CON DOCENTE</h3>
+                    <div class="form-group">
+                        <label>Nombre Docente</label>
+                        <input type="text" id="docNombre" oninput="updatePreview(); saveAllData();">
+                    </div>
+                    <div class="row">
+                        <div class="col form-group">
+                            <label>Curso/Asignatura</label>
+                            <input type="text" id="docCurso" oninput="updatePreview(); saveAllData();">
+                        </div>
+                        <div class="col form-group">
+                            <label>Fecha (DD/MM/AAAA)</label>
+                            <input type="date" id="docFecha" oninput="updatePreview(); saveAllData();">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Entrevistador(es)</label>
+                        <div id="docEntrevistadoresList" class="dynamic-list"></div>
+                        <button class="btn btn-add" onclick="addEntrevistador('doc')">+ Agregar Entrevistador</button>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Motivo</label>
+                        <div class="font-size-controls">
+                            <span class="font-size-label">Tamaño texto:</span>
+                            <div class="font-size-buttons">
+                                <button class="font-size-btn" data-size="0.8" onclick="setTextareaFontSize('docMotivo', 0.8)">S</button>
+                                <button class="font-size-btn active" data-size="1" onclick="setTextareaFontSize('docMotivo', 1)">M</button>
+                                <button class="font-size-btn" data-size="1.2" onclick="setTextareaFontSize('docMotivo', 1.2)">L</button>
+                                <button class="font-size-btn" data-size="1.4" onclick="setTextareaFontSize('docMotivo', 1.4)">XL</button>
+                            </div>
+                        </div>
+                        <textarea id="docMotivo" rows="5" oninput="updatePreview(); saveAllData();"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Acuerdos</label>
+                        <div class="font-size-controls">
+                            <span class="font-size-label">Tamaño texto:</span>
+                            <div class="font-size-buttons">
+                                <button class="font-size-btn" data-size="0.8" onclick="setTextareaFontSize('docAcuerdos', 0.8)">S</button>
+                                <button class="font-size-btn active" data-size="1" onclick="setTextareaFontSize('docAcuerdos', 1)">M</button>
+                                <button class="font-size-btn" data-size="1.2" onclick="setTextareaFontSize('docAcuerdos', 1.2)">L</button>
+                                <button class="font-size-btn" data-size="1.4" onclick="setTextareaFontSize('docAcuerdos', 1.4)">XL</button>
+                            </div>
+                        </div>
+                        <textarea id="docAcuerdos" rows="5" oninput="updatePreview(); saveAllData();"></textarea>
+                    </div>
+
+                    <div style="border-top: 2px solid #eee; padding-top: 20px;">
+                        <h4 style="margin-bottom: 15px; color: var(--primary);">Firmas Digitales</h4>
+                        
+                        <div class="signature-options">
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Color de firma:</span>
+                            <button class="signature-color-btn signature-color-black active" onclick="setSignatureColor('doc', 'black')" title="Negro"></button>
+                            <button class="signature-color-btn signature-color-blue" onclick="setSignatureColor('doc', 'blue')" title="Azul"></button>
+                            <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 10px;">Grosor:</span>
+                            <select id="penWidth-doc" onchange="setPenWidth('doc', this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ddd;">
+                                <option value="0.5">Muy fino</option>
+                                <option value="1" selected>Fino</option>
+                                <option value="1.5">Normal</option>
+                                <option value="2">Grueso</option>
+                            </select>
+                        </div>
+                        
+                        <label>Firma Docente</label>
+                        <div class="signature-container">
+                            <canvas id="sig-doc-entrevistado" class="signature-canvas"></canvas>
+                        </div>
+                        <div class="signature-controls">
+                            <button class="btn-outline" onclick="clearPad('doc-entrevistado')"><i class="fas fa-eraser"></i> Borrar</button>
+                            <button class="btn-outline" onclick="adjustSignatureSize('doc-entrevistado')"><i class="fas fa-expand-alt"></i> Ajustar Tamaño</button>
+                        </div>
+
+                        <label>Firma Entrevistador</label>
+                        <div class="signature-container">
+                            <canvas id="sig-doc-entrevistador" class="signature-canvas"></canvas>
+                        </div>
+                        <div class="signature-controls">
+                            <button class="btn-outline" onclick="clearPad('doc-entrevistador')"><i class="fas fa-eraser"></i> Borrar</button>
+                            <button class="btn-outline" onclick="adjustSignatureSize('doc-entrevistador')"><i class="fas fa-expand-alt"></i> Ajustar Tamaño</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-gestion" class="tab-content">
+                    <h3>Gestión de Fichas</h3>
+                    
+                    <!-- Configuración del Servidor GitHub -->
+                    <div class="form-group" style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
+                        <h4 style="margin-top: 0; margin-bottom: 15px; color: var(--primary);">Configuración del Servidor (GitHub)</h4>
+                        
+                        <div class="form-group">
+                            <label>Usuario/Organización de GitHub</label>
+                            <input type="text" id="githubUser" placeholder="nombre-usuario" oninput="saveGithubConfig();">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Nombre del Repositorio</label>
+                            <input type="text" id="githubRepo" placeholder="mi-repositorio" oninput="saveGithubConfig();">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Token de Acceso Personal (GitHub)</label>
+                            <div class="row">
+                                <div class="col">
+                                    <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxx" oninput="saveGithubConfig();">
+                                </div>
+                                <div class="col">
+                                    <button class="btn-outline" onclick="toggleTokenVisibility()" type="button">
+                                        <i class="fas fa-eye"></i> Mostrar
+                                    </button>
+                                </div>
+                            </div>
+                            <small style="color: var(--text-muted); display: block; margin-top: 5px;">
+                                Crea un token en GitHub con permisos "repo". <a href="https://github.com/settings/tokens" target="_blank">Generar token</a>
+                            </small>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col">
+                                <button class="btn" onclick="testGithubConnection()">
+                                    <i class="fas fa-plug"></i> Probar Conexión
+                                </button>
+                            </div>
+                            <div class="col">
+                                <button class="btn btn-outline" onclick="clearGithubConfig()">
+                                    <i class="fas fa-trash"></i> Limpiar
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div id="githubStatus" class="server-message" style="margin-top: 10px; display: none;"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Guardar Ficha Actual</label>
+                        <div class="row">
+                            <div class="col">
+                                <input type="text" id="fichaNombre" placeholder="Nombre para esta ficha" oninput="saveAllData();">
+                            </div>
+                            <div class="col">
+                                <select id="fichaTipo" onchange="updateFichaNombre()">
+                                    <option value="estudiante">Con Estudiante</option>
+                                    <option value="apoderado">Con Apoderado</option>
+                                    <option value="docente">Con Docente</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button class="btn" onclick="guardarFichaActual()" style="margin-top: 10px; width: 100%;"><i class="fas fa-save"></i> Guardar Ficha</button>
+                    </div>
+                    <div class="form-group">
+                        <label>Fichas Guardadas</label>
+                        <div id="fichasGuardadasList" class="dynamic-list" style="max-height: 300px; overflow-y: auto;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Respaldo</label>
+                        <div class="row">
+                            <div class="col"><button class="btn btn-outline" onclick="exportarTodasFichas()"><i class="fas fa-download"></i> Exportar JSON</button></div>
+                            <div class="col"><button class="btn btn-outline" onclick="importarFichas()"><i class="fas fa-upload"></i> Importar JSON</button></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="preview-panel">
+            <button class="fullscreen-btn" onclick="toggleFullscreen()"><i class="fas fa-expand"></i> Pantalla Completa</button>
+            <div class="paper" id="documentToPrint">
+                <div class="paper-content" id="paperContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para ajustar tamaño de firma -->
+    <div id="signatureModal" class="signature-modal">
+        <div class="signature-modal-content">
+            <h3 style="margin-top: 0; color: var(--primary);">Ajustar Tamaño de Firma</h3>
+            
+            <div class="signature-modal-preview">
+                <img id="modalSignatureImage" src="" alt="Vista previa de firma" class="modal-signature-img">
+            </div>
+            
+            <div class="size-slider-container">
+                <div class="size-value">Tamaño: <span id="sizeValue">100%</span></div>
+                <input type="range" id="signatureSizeSlider" class="size-slider" min="50" max="300" value="100" step="5">
+                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
+                    <span>Pequeño</span>
+                    <span>Normal</span>
+                    <span>Grande</span>
+                    <span>Muy Grande</span>
+                </div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn-outline" onclick="closeSignatureModal()">Cancelar</button>
+                <button class="btn" onclick="applySignatureSize()">Aplicar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="actions-bar">
+        <button class="btn btn-outline" style="background: white;" onclick="enviarPorCorreo()"><i class="fas fa-envelope"></i> Compartir</button>
+        <button class="btn" onclick="window.print()"><i class="fas fa-file-pdf"></i> Guardar PDF</button>
+        <button class="btn btn-outline" onclick="toggleFullscreen()"><i class="fas fa-expand"></i> Pantalla Completa</button>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN DE GITHUB ---
+        const githubConfig = {
+            user: '',
+            repo: '',
+            token: '',
+            branch: 'main',
+            logoPath: 'logo.png'
+        };
+
+        // Cargar configuración de GitHub
+        function loadGithubConfig() {
+            const saved = localStorage.getItem('githubConfig');
+            if (saved) {
+                try {
+                    const config = JSON.parse(saved);
+                    githubConfig.user = config.user || '';
+                    githubConfig.repo = config.repo || '';
+                    githubConfig.token = config.token || '';
+                    githubConfig.branch = config.branch || 'main';
+                    
+                    // Actualizar campos
+                    document.getElementById('githubUser').value = githubConfig.user;
+                    document.getElementById('githubRepo').value = githubConfig.repo;
+                    document.getElementById('githubToken').value = githubConfig.token;
+                    
+                    // Verificar si hay logo en servidor
+                    checkServerLogo();
+                    
+                    return true;
+                } catch (e) {
+                    console.error('Error cargando configuración GitHub:', e);
+                }
+            }
+            return false;
+        }
+
+        // Guardar configuración de GitHub
+        function saveGithubConfig() {
+            githubConfig.user = document.getElementById('githubUser').value.trim();
+            githubConfig.repo = document.getElementById('githubRepo').value.trim();
+            githubConfig.token = document.getElementById('githubToken').value.trim();
+            
+            localStorage.setItem('githubConfig', JSON.stringify(githubConfig));
+        }
+
+        function clearGithubConfig() {
+            if (confirm('¿Estás seguro de eliminar la configuración de GitHub?')) {
+                githubConfig.user = '';
+                githubConfig.repo = '';
+                githubConfig.token = '';
+                
+                document.getElementById('githubUser').value = '';
+                document.getElementById('githubRepo').value = '';
+                document.getElementById('githubToken').value = '';
+                
+                localStorage.removeItem('githubConfig');
+                
+                showServerMessage('Configuración eliminada.', 'success');
+            }
+        }
+
+        function toggleTokenVisibility() {
+            const tokenInput = document.getElementById('githubToken');
+            const toggleBtn = document.querySelector('[onclick="toggleTokenVisibility()"]');
+            
+            if (tokenInput.type === 'password') {
+                tokenInput.type = 'text';
+                toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar';
+            } else {
+                tokenInput.type = 'password';
+                toggleBtn.innerHTML = '<i class="fas fa-eye"></i> Mostrar';
+            }
+        }
+
+        // Probar conexión con GitHub
+        async function testGithubConnection() {
+            saveGithubConfig();
+            
+            if (!githubConfig.user || !githubConfig.repo || !githubConfig.token) {
+                showGithubStatus('Completa todos los campos primero.', 'error');
+                return;
+            }
+            
+            showGithubStatus('Probando conexión con GitHub...', 'info');
+            
+            try {
+                const testUrl = `https://api.github.com/repos/${githubConfig.user}/${githubConfig.repo}`;
+                const response = await fetch(testUrl, {
+                    headers: {
+                        'Authorization': `token ${githubConfig.token}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showGithubStatus(`✓ Conexión exitosa con ${data.full_name}`, 'success');
+                    
+                    // Verificar si ya existe el logo
+                    checkServerLogo();
+                } else {
+                    if (response.status === 404) {
+                        showGithubStatus('Repositorio no encontrado. ¿Está bien escrito?', 'error');
+                    } else if (response.status === 401) {
+                        showGithubStatus('Token inválido o sin permisos.', 'error');
+                    } else {
+                        showGithubStatus(`Error ${response.status}: ${response.statusText}`, 'error');
+                    }
+                }
+            } catch (error) {
+                showGithubStatus('Error de conexión: ' + error.message, 'error');
+            }
+        }
+
+        function showGithubStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('githubStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = `server-message ${type}`;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        function showServerMessage(message, type = 'info') {
+            const msgDiv = document.getElementById('serverMessage');
+            msgDiv.textContent = message;
+            msgDiv.className = `server-message ${type}`;
+            msgDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                msgDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Guardar logo en GitHub
+        async function saveLogoToServer() {
+            saveGithubConfig();
+            
+            if (!githubConfig.user || !githubConfig.repo || !githubConfig.token) {
+                showServerMessage('Configura GitHub primero en la pestaña "Gestión".', 'error');
+                return;
+            }
+            
+            const logoData = localStorage.getItem('cceLogo');
+            if (!logoData) {
+                showServerMessage('Primero carga un logo desde tu computadora.', 'error');
+                return;
+            }
+            
+            // Convertir DataURL a Blob
+            const blob = dataURLtoBlob(logoData);
+            const fileContent = await blobToBase64(blob);
+            
+            showServerMessage('Subiendo logo a GitHub...', 'info');
+            
+            try {
+                // Primero, verificar si el archivo ya existe
+                const checkUrl = `https://api.github.com/repos/${githubConfig.user}/${githubConfig.repo}/contents/${githubConfig.logoPath}`;
+                let sha = null;
+                
+                try {
+                    const checkResponse = await fetch(checkUrl, {
+                        headers: {
+                            'Authorization': `token ${githubConfig.token}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+                    
+                    if (checkResponse.ok) {
+                        const existingFile = await checkResponse.json();
+                        sha = existingFile.sha;
+                    }
+                } catch (e) {
+                    // Archivo no existe, continuar sin SHA
+                }
+                
+                // Crear o actualizar archivo
+                const updateUrl = `https://api.github.com/repos/${githubConfig.user}/${githubConfig.repo}/contents/${githubConfig.logoPath}`;
+                const response = await fetch(updateUrl, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${githubConfig.token}`,
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: 'Actualizar logo del colegio',
+                        content: fileContent.split(',')[1], // Remover prefijo data:image/...
+                        sha: sha,
+                        branch: githubConfig.branch
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const logoUrl = data.content.download_url;
+                    
+                    // Guardar URL del logo en GitHub
+                    localStorage.setItem('cceLogoGitHub', logoUrl);
+                    
+                    showServerMessage('✓ Logo guardado en GitHub exitosamente', 'success');
+                    
+                    // Actualizar vista previa del logo del servidor
+                    updateServerLogoPreview(logoUrl);
+                    
+                    // Actualizar logo en la aplicación
+                    document.getElementById('editorLogo').src = logoUrl;
+                    updatePreview();
+                    saveAllData();
+                } else {
+                    const error = await response.json();
+                    showServerMessage('Error al subir: ' + (error.message || 'Desconocido'), 'error');
+                }
+            } catch (error) {
+                showServerMessage('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Cargar logo desde GitHub
+        async function loadLogoFromServer() {
+            saveGithubConfig();
+            
+            if (!githubConfig.user || !githubConfig.repo) {
+                showServerMessage('Configura GitHub primero en la pestaña "Gestión".', 'error');
+                return;
+            }
+            
+            showServerMessage('Cargando logo desde GitHub...', 'info');
+            
+            try {
+                const logoUrl = `https://raw.githubusercontent.com/${githubConfig.user}/${githubConfig.repo}/${githubConfig.branch}/${githubConfig.logoPath}`;
+                
+                // Verificar si el archivo existe
+                const response = await fetch(logoUrl);
+                
+                if (response.ok) {
+                    // Convertir a DataURL
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+                    
+                    reader.onloadend = function() {
+                        const logoData = reader.result;
+                        
+                        // Guardar en localStorage
+                        localStorage.setItem('cceLogo', logoData);
+                        localStorage.setItem('cceLogoGitHub', logoUrl);
+                        
+                        // Actualizar interfaz
+                        document.getElementById('editorLogo').src = logoData;
+                        updateServerLogoPreview(logoUrl);
+                        updatePreview();
+                        saveAllData();
+                        
+                        showServerMessage('✓ Logo cargado desde GitHub', 'success');
+                    };
+                    
+                    reader.readAsDataURL(blob);
+                } else {
+                    showServerMessage('No hay logo guardado en el servidor.', 'error');
+                    document.getElementById('noServerLogo').style.display = 'block';
+                    document.getElementById('serverLogoPreview').style.display = 'none';
+                }
+            } catch (error) {
+                showServerMessage('Error al cargar: ' + error.message, 'error');
+            }
+        }
+
+        // Verificar si hay logo en el servidor
+        async function checkServerLogo() {
+            if (!githubConfig.user || !githubConfig.repo) return;
+            
+            try {
+                const logoUrl = `https://raw.githubusercontent.com/${githubConfig.user}/${githubConfig.repo}/${githubConfig.branch}/${githubConfig.logoPath}`;
+                const response = await fetch(logoUrl, { method: 'HEAD' });
+                
+                if (response.ok) {
+                    updateServerLogoPreview(logoUrl);
+                    localStorage.setItem('cceLogoGitHub', logoUrl);
+                } else {
+                    document.getElementById('noServerLogo').style.display = 'block';
+                    document.getElementById('serverLogoPreview').style.display = 'none';
+                }
+            } catch (error) {
+                // Silenciar error, solo significa que no hay logo
+            }
+        }
+
+        function updateServerLogoPreview(logoUrl) {
+            const previewDiv = document.getElementById('serverLogoPreview');
+            const img = document.getElementById('serverLogoImg');
+            const noLogoDiv = document.getElementById('noServerLogo');
+            
+            img.src = logoUrl;
+            previewDiv.style.display = 'block';
+            noLogoDiv.style.display = 'none';
+        }
+
+        // Funciones auxiliares
+        function dataURLtoBlob(dataURL) {
+            const parts = dataURL.split(';base64,');
+            const contentType = parts[0].split(':')[1];
+            const raw = window.atob(parts[1]);
+            const rawLength = raw.length;
+            const uInt8Array = new Uint8Array(rawLength);
+            
+            for (let i = 0; i < rawLength; ++i) {
+                uInt8Array[i] = raw.charCodeAt(i);
+            }
+            
+            return new Blob([uInt8Array], { type: contentType });
+        }
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        // --- 1. CONFIGURACIÓN DE FIRMAS (Signature Pad) ---
+        const pads = {};
+        const penColors = {
+            'est': '#000000',
+            'apo': '#000000',
+            'doc': '#000000'
+        };
+        const penWidths = {
+            'est': 1,
+            'apo': 1,
+            'doc': 1
+        };
+        
+        // Almacenar tamaños personalizados de firmas
+        const signatureSizes = {};
+        
+        // Almacenar alturas de contenido para ajustar márgenes
+        const contentHeights = {
+            'est': { motivo: 0, acuerdos: 0 },
+            'apo': { motivo: 0, acuerdos: 0 },
+            'doc': { motivo: 0, acuerdos: 0 }
+        };
+        
+        const canvasIds = [
+            'sig-est-entrevistado', 'sig-est-entrevistador',
+            'sig-apo-entrevistado', 'sig-apo-entrevistador',
+            'sig-doc-entrevistado', 'sig-doc-entrevistador'
+        ];
+
+        function initPads() {
+            canvasIds.forEach(id => {
+                const canvas = document.getElementById(id);
+                if(canvas) {
+                    const type = id.split('-')[1]; // 'est', 'apo', 'doc'
+                    const pad = new SignaturePad(canvas, { 
+                        backgroundColor: 'rgb(255, 255, 255)',
+                        penColor: penColors[type] || '#000000',
+                        minWidth: penWidths[type] || 1,
+                        maxWidth: (penWidths[type] || 1) * 2
+                    });
+                    pads[id] = pad;
+                    
+                    // Actualizar vista previa al terminar trazo
+                    pad.addEventListener("endStroke", () => {
+                        updatePreview();
+                        saveAllData(); // Autoguardar
+                    });
+                }
+            });
+            resizeAllCanvases();
+        }
+
+        function setSignatureColor(type, color) {
+            const colorValue = color === 'blue' ? '#1e6f88' : '#000000';
+            penColors[type] = colorValue;
+            
+            // Actualizar botones de color
+            const tab = document.getElementById(`tab-${type}`);
+            if(tab) {
+                const blackBtn = tab.querySelector('.signature-color-black');
+                const blueBtn = tab.querySelector('.signature-color-blue');
+                if(blackBtn) blackBtn.classList.remove('active');
+                if(blueBtn) blueBtn.classList.remove('active');
+                
+                if(color === 'black' && blackBtn) blackBtn.classList.add('active');
+                if(color === 'blue' && blueBtn) blueBtn.classList.add('active');
+            }
+            
+            // Actualizar pads correspondientes
+            const pad1 = pads[`sig-${type}-entrevistado`];
+            const pad2 = pads[`sig-${type}-entrevistador`];
+            
+            if(pad1) {
+                pad1.penColor = colorValue;
+                // Redibujar con el nuevo color
+                if(!pad1.isEmpty()) {
+                    const data = pad1.toData();
+                    pad1.clear();
+                    pad1.fromData(data);
+                }
+            }
+            if(pad2) {
+                pad2.penColor = colorValue;
+                if(!pad2.isEmpty()) {
+                    const data = pad2.toData();
+                    pad2.clear();
+                    pad2.fromData(data);
+                }
+            }
+            
+            saveAllData();
+        }
+
+        function setPenWidth(type, width) {
+            penWidths[type] = parseFloat(width);
+            
+            const pad1 = pads[`sig-${type}-entrevistado`];
+            const pad2 = pads[`sig-${type}-entrevistador`];
+            
+            if(pad1) {
+                pad1.minWidth = penWidths[type];
+                pad1.maxWidth = penWidths[type] * 2;
+            }
+            if(pad2) {
+                pad2.minWidth = penWidths[type];
+                pad2.maxWidth = penWidths[type] * 2;
+            }
+            
+            saveAllData();
+        }
+
+        // Ajustar resolución retina
+        function resizeCanvas(padId) {
+            const canvas = document.getElementById(padId);
+            const pad = pads[padId];
+            if(!canvas || !pad) return;
+
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            
+            // Guardar datos si existen
+            const data = !pad.isEmpty() ? pad.toData() : null;
+
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+
+            pad.clear(); // Necesario borrar y repintar
+            if(data) pad.fromData(data);
+        }
+
+        function resizeAllCanvases() {
+            Object.keys(pads).forEach(id => resizeCanvas(id));
+        }
+
+        function clearPad(suffix) {
+            const id = `sig-${suffix}`;
+            if(pads[id]) {
+                pads[id].clear();
+                // Eliminar tamaño personalizado
+                delete signatureSizes[id];
+                updatePreview();
+                saveAllData();
+            }
+        }
+
+        window.addEventListener("resize", resizeAllCanvases);
+
+        // --- 2. CALCULAR ALTURA DE CONTENIDO ---
+        function calculateContentHeights() {
+            // Calcular alturas aproximadas del contenido de texto
+            const tabActiva = document.querySelector('.tab-content.active').id;
+            let type = '';
+            
+            if(tabActiva.includes('estudiante')) type = 'est';
+            else if(tabActiva.includes('apoderado')) type = 'apo';
+            else if(tabActiva.includes('docente')) type = 'doc';
+            
+            if(!type) return;
+            
+            // Calcular líneas de texto
+            const motivoText = document.getElementById(`${type}Motivo`).value;
+            const acuerdosText = document.getElementById(`${type}Acuerdos`).value;
+            
+            // Calcular líneas aproximadas (una línea ≈ 50 caracteres)
+            const motivoLines = Math.max(1, Math.ceil(motivoText.length / 50));
+            const acuerdosLines = Math.max(1, Math.ceil(acuerdosText.length / 50));
+            
+            // Altura mínima por línea (en píxeles)
+            const lineHeight = 20;
+            
+            contentHeights[type].motivo = Math.max(120, motivoLines * lineHeight + 30);
+            contentHeights[type].acuerdos = Math.max(120, acuerdosLines * lineHeight + 30);
+            
+            // Ajustar altura mínima de las cajas en el editor
+            document.getElementById(`${type}Motivo`).style.minHeight = contentHeights[type].motivo + 'px';
+            document.getElementById(`${type}Acuerdos`).style.minHeight = contentHeights[type].acuerdos + 'px';
+        }
+
+        // --- 3. AJUSTAR TAMAÑO DE FIRMA ---
+        let currentSignatureId = null;
+        let currentSignatureSize = 100;
+
+        function adjustSignatureSize(signatureId) {
+            const id = `sig-${signatureId}`;
+            const pad = pads[id];
+            
+            if(!pad || pad.isEmpty()) {
+                alert("Primero debes crear una firma antes de ajustar su tamaño.");
+                return;
+            }
+            
+            currentSignatureId = id;
+            
+            // Obtener tamaño actual
+            currentSignatureSize = signatureSizes[id] || 100;
+            
+            // Mostrar firma en el modal
+            const signatureImage = pad.toDataURL();
+            document.getElementById('modalSignatureImage').src = signatureImage;
+            document.getElementById('signatureSizeSlider').value = currentSignatureSize;
+            document.getElementById('sizeValue').textContent = currentSignatureSize + '%';
+            
+            // Mostrar modal
+            document.getElementById('signatureModal').style.display = 'flex';
+            
+            // Actualizar vista previa en tiempo real
+            updateModalPreview();
+        }
+
+        function updateModalPreview() {
+            const slider = document.getElementById('signatureSizeSlider');
+            const sizeValue = parseInt(slider.value);
+            document.getElementById('sizeValue').textContent = sizeValue + '%';
+            
+            // Aplicar transformación CSS para vista previa
+            const img = document.getElementById('modalSignatureImage');
+            img.style.transform = `scale(${sizeValue / 100})`;
+            img.style.transformOrigin = 'center';
+        }
+
+        function applySignatureSize() {
+            if (currentSignatureId) {
+                const sizeValue = parseInt(document.getElementById('signatureSizeSlider').value);
+                signatureSizes[currentSignatureId] = sizeValue;
+                
+                // Guardar cambios
+                saveAllData();
+                updatePreview();
+                
+                // Cerrar modal
+                closeSignatureModal();
+                
+                // Mostrar confirmación
+                setTimeout(() => {
+                    alert("Tamaño de firma ajustado correctamente.");
+                }, 300);
+            }
+        }
+
+        function closeSignatureModal() {
+            document.getElementById('signatureModal').style.display = 'none';
+            currentSignatureId = null;
+        }
+
+        // Configurar evento del slider
+        document.getElementById('signatureSizeSlider').addEventListener('input', updateModalPreview);
+
+        // --- 4. CONFIGURACIÓN DE VOZ ---
+        let recognition;
+        let activeTextarea = null;
+        let activeMicButton = null;
+
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'es-CL';
+            recognition.onstart = () => { if(activeMicButton) { activeMicButton.classList.add('recording'); activeMicButton.innerHTML = '<i class="fas fa-stop"></i>'; } };
+            recognition.onend = () => { if(activeMicButton) { activeMicButton.classList.remove('recording'); activeMicButton.innerHTML = '<i class="fas fa-microphone"></i>'; activeMicButton = null; } activeTextarea = null; };
+            recognition.onresult = (event) => {
+                let final_transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) final_transcript += event.results[i][0].transcript;
+                }
+                if (activeTextarea && final_transcript.length > 0) {
+                    const spacer = activeTextarea.value.length > 0 && !activeTextarea.value.endsWith(' ') ? ' ' : '';
+                    activeTextarea.value += spacer + final_transcript;
+                    updatePreview(); saveAllData();
+                }
+            };
+        } 
+
+        function toggleDictation(btn, textareaId) {
+            if (!recognition) return alert("Usa Chrome/Safari para dictado.");
+            const textarea = document.getElementById(textareaId);
+            if (!textarea) return;
+
+            if (activeMicButton === btn) { recognition.stop(); } 
+            else {
+                if(activeMicButton) recognition.stop();
+                setTimeout(() => { activeMicButton = btn; activeTextarea = textarea; recognition.start(); }, 300);
+            }
+        }
+
+        // --- 5. CONTROL DE TAMAÑO DE TEXTO ---
+        const textareaFontSizes = {};
+
+        function setTextareaFontSize(textareaId, size) {
+            const textarea = document.getElementById(textareaId);
+            if (!textarea) return;
+            
+            // Guardar tamaño
+            textareaFontSizes[textareaId] = size;
+            
+            // Actualizar botones
+            const tab = textareaId.includes('est') ? 'estudiante' : 
+                        textareaId.includes('apo') ? 'apoderado' : 'docente';
+            const buttons = document.querySelectorAll(`#tab-${tab} .font-size-btn`);
+            buttons.forEach(btn => {
+                btn.classList.remove('active');
+                if(parseFloat(btn.dataset.size) === size) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Actualizar vista previa
+            updatePreview();
+            saveAllData();
+        }
+
+        // --- 6. FORMATO DE FECHA (DD/MM/AAAA) ---
+        function formatDateToDDMMYYYY(dateString) {
+            if (!dateString) return '';
+            
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return dateString;
+            
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            
+            return `${day}/${month}/${year}`;
+        }
+
+        // --- 7. PANTALLA COMPLETA ---
+        let isFullscreen = false;
+
+        function toggleFullscreen() {
+            const previewPanel = document.querySelector('.preview-panel');
+            const paper = document.querySelector('.paper');
+            
+            if (!isFullscreen) {
+                previewPanel.classList.add('preview-fullscreen');
+                paper.style.width = '100%';
+                paper.style.maxWidth = '100%';
+                paper.style.height = 'auto';
+                paper.style.padding = '20px';
+                isFullscreen = true;
+            } else {
+                previewPanel.classList.remove('preview-fullscreen');
+                paper.style.width = '210mm';
+                paper.style.maxWidth = '210mm';
+                paper.style.height = 'auto';
+                paper.style.padding = '20mm';
+                isFullscreen = false;
+            }
+            
+            // Redimensionar firmas después del cambio
+            setTimeout(resizeAllCanvases, 100);
+        }
+
+        // --- 8. LÓGICA PRINCIPAL ---
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            // Activar botón
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                if (btn.getAttribute('onclick').includes(tabName)) btn.classList.add('active');
+            });
+
+            // IMPORTANTE: Redimensionar canvas al mostrar pestaña oculta
+            setTimeout(resizeAllCanvases, 50);
+            calculateContentHeights();
+            updatePreview();
+        }
+
+        function addEntrevistador(tipo) {
+            const listId = `${tipo}EntrevistadoresList`;
+            const div = document.createElement('div');
+            div.className = 'interviewer-item';
+            div.innerHTML = `<input type="text" class="entrevistador-input" placeholder="Nombre entrevistador" oninput="updatePreview(); saveAllData();" style="flex:1;">
+                             <button class="btn btn-danger" onclick="this.parentElement.remove(); updatePreview(); saveAllData();"><i class="fas fa-times"></i></button>`;
+            document.getElementById(listId).appendChild(div);
+            updatePreview(); saveAllData();
+        }
+
+        function loadLogo(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    localStorage.setItem('cceLogo', e.target.result);
+                    document.getElementById('editorLogo').src = e.target.result;
+                    
+                    // Mostrar botón para guardar en servidor
+                    document.getElementById('saveToServerBtn').disabled = false;
+                    
+                    updatePreview(); saveAllData();
+                    
+                    // Mostrar mensaje
+                    showServerMessage('Logo cargado localmente. Haz clic en "Guardar en Servidor" para subirlo a GitHub.', 'info');
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // --- 9. GUARDAR Y CARGAR DATOS (INCLUYE FIRMAS Y TAMAÑOS) ---
+        function saveAllData() {
+            // Helper para obtener imagen de firma
+            const getSig = (id) => pads[id] && !pads[id].isEmpty() ? pads[id].toDataURL() : '';
+
+            const data = {
+                colegio: {
+                    nombre: document.getElementById('colegioNombre').value,
+                    direccion: document.getElementById('colegioDireccion').value,
+                    telefono: document.getElementById('colegioTelefono').value,
+                    comite: document.getElementById('comiteNombre').value
+                },
+                estudiante: {
+                    nombre: document.getElementById('estNombre').value,
+                    curso: document.getElementById('estCurso').value,
+                    fecha: document.getElementById('estFecha').value,
+                    entrevistadores: Array.from(document.querySelectorAll('#estEntrevistadoresList .entrevistador-input')).map(i => i.value),
+                    motivo: document.getElementById('estMotivo').value,
+                    acuerdos: document.getElementById('estAcuerdos').value,
+                    // Firmas
+                    sigEntrevistado: getSig('sig-est-entrevistado'),
+                    sigEntrevistador: getSig('sig-est-entrevistador')
+                },
+                apoderado: {
+                    estNombre: document.getElementById('apoEstNombre').value,
+                    nombre: document.getElementById('apoNombre').value,
+                    curso: document.getElementById('apoCurso').value,
+                    fecha: document.getElementById('apoFecha').value,
+                    entrevistadores: Array.from(document.querySelectorAll('#apoEntrevistadoresList .entrevistador-input')).map(i => i.value),
+                    motivo: document.getElementById('apoMotivo').value,
+                    acuerdos: document.getElementById('apoAcuerdos').value,
+                    // Firmas
+                    sigEntrevistado: getSig('sig-apo-entrevistado'),
+                    sigEntrevistador: getSig('sig-apo-entrevistador')
+                },
+                docente: {
+                    nombre: document.getElementById('docNombre').value,
+                    curso: document.getElementById('docCurso').value,
+                    fecha: document.getElementById('docFecha').value,
+                    entrevistadores: Array.from(document.querySelectorAll('#docEntrevistadoresList .entrevistador-input')).map(i => i.value),
+                    motivo: document.getElementById('docMotivo').value,
+                    acuerdos: document.getElementById('docAcuerdos').value,
+                    // Firmas
+                    sigEntrevistado: getSig('sig-doc-entrevistado'),
+                    sigEntrevistador: getSig('sig-doc-entrevistador')
+                },
+                config: {
+                    fichaNombre: document.getElementById('fichaNombre').value,
+                    fichaTipo: document.getElementById('fichaTipo').value
+                },
+                signatureSettings: {
+                    colors: penColors,
+                    widths: penWidths,
+                    sizes: signatureSizes
+                },
+                fontSizes: textareaFontSizes
+            };
+            localStorage.setItem('cceFichasData', JSON.stringify(data));
+        }
+
+        function loadAllData() {
+            const savedData = localStorage.getItem('cceFichasData');
+            if (!savedData) return false;
+            try {
+                const data = JSON.parse(savedData);
+                
+                // Colegio
+                if(data.colegio) {
+                    document.getElementById('colegioNombre').value = data.colegio.nombre || '';
+                    document.getElementById('colegioDireccion').value = data.colegio.direccion || '';
+                    document.getElementById('colegioTelefono').value = data.colegio.telefono || '';
+                    document.getElementById('comiteNombre').value = data.colegio.comite || '';
+                }
+
+                // Cargar función auxiliar
+                const loadSection = (prefix, sectionData, listId) => {
+                    if(!sectionData) return;
+                    // Campos de texto dinámicos según prefijo
+                    if(prefix === 'est') {
+                        document.getElementById('estNombre').value = sectionData.nombre || '';
+                        document.getElementById('estCurso').value = sectionData.curso || '';
+                        document.getElementById('estFecha').value = sectionData.fecha || '';
+                        document.getElementById('estMotivo').value = sectionData.motivo || '';
+                        document.getElementById('estAcuerdos').value = sectionData.acuerdos || '';
+                    } else if(prefix === 'apo') {
+                        document.getElementById('apoEstNombre').value = sectionData.estNombre || '';
+                        document.getElementById('apoNombre').value = sectionData.nombre || '';
+                        document.getElementById('apoCurso').value = sectionData.curso || '';
+                        document.getElementById('apoFecha').value = sectionData.fecha || '';
+                        document.getElementById('apoMotivo').value = sectionData.motivo || '';
+                        document.getElementById('apoAcuerdos').value = sectionData.acuerdos || '';
+                    } else if(prefix === 'doc') {
+                        document.getElementById('docNombre').value = sectionData.nombre || '';
+                        document.getElementById('docCurso').value = sectionData.curso || '';
+                        document.getElementById('docFecha').value = sectionData.fecha || '';
+                        document.getElementById('docMotivo').value = sectionData.motivo || '';
+                        document.getElementById('docAcuerdos').value = sectionData.acuerdos || '';
+                    }
+
+                    // Entrevistadores
+                    document.getElementById(listId).innerHTML = '';
+                    if (sectionData.entrevistadores && sectionData.entrevistadores.length > 0) {
+                        sectionData.entrevistadores.forEach(e => {
+                            addEntrevistador(prefix);
+                            const inputs = document.querySelectorAll(`#${listId} .entrevistador-input`);
+                            inputs[inputs.length - 1].value = e;
+                        });
+                    } else { addEntrevistador(prefix); }
+
+                    // Firmas
+                    if(sectionData.sigEntrevistado) {
+                        const pad = pads[`sig-${prefix}-entrevistado`];
+                        if(pad) {
+                            pad.clear();
+                            pad.fromDataURL(sectionData.sigEntrevistado);
+                        }
+                    }
+                    if(sectionData.sigEntrevistador) {
+                        const pad = pads[`sig-${prefix}-entrevistador`];
+                        if(pad) {
+                            pad.clear();
+                            pad.fromDataURL(sectionData.sigEntrevistador);
+                        }
+                    }
+                };
+
+                loadSection('est', data.estudiante, 'estEntrevistadoresList');
+                loadSection('apo', data.apoderado, 'apoEntrevistadoresList');
+                loadSection('doc', data.docente, 'docEntrevistadoresList');
+
+                if (data.config) {
+                    document.getElementById('fichaNombre').value = data.config.fichaNombre || '';
+                    document.getElementById('fichaTipo').value = data.config.fichaTipo || 'estudiante';
+                }
+
+                // Cargar configuraciones de firma
+                if (data.signatureSettings) {
+                    if (data.signatureSettings.colors) {
+                        Object.assign(penColors, data.signatureSettings.colors);
+                    }
+                    if (data.signatureSettings.widths) {
+                        Object.assign(penWidths, data.signatureSettings.widths);
+                    }
+                    if (data.signatureSettings.sizes) {
+                        Object.assign(signatureSizes, data.signatureSettings.sizes);
+                    }
+                }
+
+                // Cargar tamaños de fuente
+                if (data.fontSizes) {
+                    Object.assign(textareaFontSizes, data.fontSizes);
+                }
+
+                return true;
+            } catch (e) { console.error(e); return false; }
+        }
+
+        // --- 10. GENERACIÓN VISTA PREVIA MEJORADA ---
+        function updatePreview() {
+            const paperContent = document.getElementById('paperContent');
+            const tabActiva = document.querySelector('.tab-content.active').id;
+            
+            let fichaTipo = 'estudiante';
+            if (tabActiva.includes('apoderado')) fichaTipo = 'apoderado';
+            if (tabActiva.includes('docente')) fichaTipo = 'docente';
+            
+            const colegioNombre = document.getElementById('colegioNombre').value;
+            
+            // Obtener logo: primero intentar desde GitHub, luego local
+            let logo = localStorage.getItem('cceLogoGitHub') || localStorage.getItem('cceLogo') || 'https://via.placeholder.com/100x100?text=LOGO';
+            
+            // Calcular altura de contenido actual
+            calculateContentHeights();
+
+            // Calcular espacio necesario para firmas ampliadas
+            const getMaxSignatureHeight = (padId1, padId2) => {
+                let maxHeight = 60; // Altura base
+                
+                // Verificar si hay firmas y si tienen tamaño personalizado
+                if (pads[padId1] && !pads[padId1].isEmpty()) {
+                    const size1 = signatureSizes[padId1] || 100;
+                    maxHeight = Math.max(maxHeight, 60 * (size1 / 100));
+                }
+                
+                if (pads[padId2] && !pads[padId2].isEmpty()) {
+                    const size2 = signatureSizes[padId2] || 100;
+                    maxHeight = Math.max(maxHeight, 60 * (size2 / 100));
+                }
+                
+                return Math.min(maxHeight, 120); // Máximo 120px para no exagerar
+            };
+
+            // Helper para obtener HTML de firma con tamaño personalizado y márgenes ajustados
+            const getSigHTML = (padId, name, type) => {
+                if(pads[padId] && !pads[padId].isEmpty()) {
+                    let imgSrc = pads[padId].toDataURL();
+                    let sizeStyle = '';
+                    let containerStyle = '';
+                    
+                    // Aplicar tamaño personalizado si existe
+                    const size = signatureSizes[padId] || 100;
+                    const scale = size / 100;
+                    
+                    sizeStyle = `style="transform: scale(${scale}); transform-origin: center; max-width: ${220 * scale}px; max-height: ${80 * scale}px;"`;
+                    containerStyle = `style="top: -${40 * scale}px;"`;
+                    
+                    return `
+                        <div class="signature-img-container" ${containerStyle}>
+                            <img src="${imgSrc}" class="signature-img-preview" ${sizeStyle}>
+                        </div>
+                        <div class="signature-name" style="margin-top: ${45 * scale}px;">${name || ''}</div>
+                    `;
+                }
+                return `<div class="signature-name">${name || ''}</div>`;
+            };
+
+            // Helper para formatear texto con tamaño de fuente
+            const formatTextWithSize = (text, textareaId, type) => {
+                const baseSize = 11; // 11pt base
+                const sizeMultiplier = textareaFontSizes[textareaId] || 1;
+                const fontSize = baseSize * sizeMultiplier;
+                
+                // Altura mínima ajustada según el tipo de contenido
+                let minHeight = '120px';
+                if (type === 'motivo') {
+                    minHeight = Math.max(120, contentHeights[fichaTipo.substring(0, 3)].motivo) + 'px';
+                } else if (type === 'acuerdos') {
+                    minHeight = Math.max(120, contentHeights[fichaTipo.substring(0, 3)].acuerdos) + 'px';
+                }
+                
+                return `<div style="font-size: ${fontSize}pt; line-height: 1.4; word-wrap: break-word; hyphens: auto; min-height: ${minHeight};">${text.replace(/\n/g, '<br>')}</div>`;
+            };
+
+            let titulo = '', contenido = '';
+            
+            if(fichaTipo === 'estudiante') {
+                titulo = 'FICHA ENTREVISTA CON ESTUDIANTE';
+                const nombre = document.getElementById('estNombre').value;
+                const curso = document.getElementById('estCurso').value;
+                const entrevistadores = Array.from(document.querySelectorAll('#estEntrevistadoresList .entrevistador-input')).map(i=>i.value).join(', ');
+                const fechaFormateada = formatDateToDDMMYYYY(document.getElementById('estFecha').value);
+                
+                // Calcular margen extra necesario para firmas
+                const maxSigHeight = getMaxSignatureHeight('sig-est-entrevistado', 'sig-est-entrevistador');
+                const extraMargin = Math.max(0, (maxSigHeight - 60) * 2);
+                
+                contenido = `
+                    <table class="data-table">
+                        <tr><td class="label-cell">Estudiante:</td><td>${nombre}</td></tr>
+                        <tr><td class="label-cell">Curso:</td><td>${curso}</td></tr>
+                        <tr><td class="label-cell">Fecha:</td><td>${fechaFormateada}</td></tr>
+                        <tr><td class="label-cell">Entrevistadores:</td><td>${entrevistadores}</td></tr>
+                    </table>
+                    <div class="section-box" style="margin-bottom: ${20 + extraMargin/2}px;">
+                        <span class="section-title">Motivo:</span>
+                        ${formatTextWithSize(document.getElementById('estMotivo').value, 'estMotivo', 'motivo')}
+                    </div>
+                    <div class="section-box" style="margin-bottom: ${20 + extraMargin/2}px;">
+                        <span class="section-title">Acuerdos:</span>
+                        ${formatTextWithSize(document.getElementById('estAcuerdos').value, 'estAcuerdos', 'acuerdos')}
+                    </div>
+                    <div class="signature-section" style="margin-top: ${40 + extraMargin}px;">
+                        <div class="signature-grid">
+                            <div class="signature-box">
+                                ${getSigHTML('sig-est-entrevistado', nombre || 'Estudiante', 'est')}
+                                Firma Estudiante
+                            </div>
+                            <div class="signature-box">
+                                ${getSigHTML('sig-est-entrevistador', 'Entrevistador', 'est')}
+                                Firma CCE
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+            } else if (fichaTipo === 'apoderado') {
+                titulo = 'FICHA ENTREVISTA CON APODERADO';
+                const nombre = document.getElementById('apoNombre').value;
+                const estNombre = document.getElementById('apoEstNombre').value;
+                const entrevistadores = Array.from(document.querySelectorAll('#apoEntrevistadoresList .entrevistador-input')).map(i=>i.value).join(', ');
+                const fechaFormateada = formatDateToDDMMYYYY(document.getElementById('apoFecha').value);
+                
+                // Calcular margen extra necesario para firmas
+                const maxSigHeight = getMaxSignatureHeight('sig-apo-entrevistado', 'sig-apo-entrevistador');
+                const extraMargin = Math.max(0, (maxSigHeight - 60) * 2);
+
+                contenido = `
+                    <table class="data-table">
+                        <tr><td class="label-cell">Apoderado:</td><td>${nombre}</td></tr>
+                        <tr><td class="label-cell">Estudiante:</td><td>${estNombre}</td></tr>
+                        <tr><td class="label-cell">Curso:</td><td>${document.getElementById('apoCurso').value}</td></tr>
+                        <tr><td class="label-cell">Fecha:</td><td>${fechaFormateada}</td></tr>
+                        <tr><td class="label-cell">Entrevistadores:</td><td>${entrevistadores}</td></tr>
+                    </table>
+                    <div class="section-box" style="margin-bottom: ${20 + extraMargin/2}px;">
+                        <span class="section-title">Motivo:</span>
+                        ${formatTextWithSize(document.getElementById('apoMotivo').value, 'apoMotivo', 'motivo')}
+                    </div>
+                    <div class="section-box" style="margin-bottom: ${20 + extraMargin/2}px;">
+                        <span class="section-title">Acuerdos:</span>
+                        ${formatTextWithSize(document.getElementById('apoAcuerdos').value, 'apoAcuerdos', 'acuerdos')}
+                    </div>
+                    <div class="signature-section" style="margin-top: ${40 + extraMargin}px;">
+                        <div class="signature-grid">
+                            <div class="signature-box">
+                                ${getSigHTML('sig-apo-entrevistado', nombre || 'Apoderado', 'apo')}
+                                Firma Apoderado
+                            </div>
+                            <div class="signature-box">
+                                ${getSigHTML('sig-apo-entrevistador', 'Entrevistador', 'apo')}
+                                Firma CCE
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+            } else { // Docente
+                titulo = 'FICHA ENTREVISTA CON DOCENTE';
+                const nombre = document.getElementById('docNombre').value;
+                const entrevistadores = Array.from(document.querySelectorAll('#docEntrevistadoresList .entrevistador-input')).map(i=>i.value).join(', ');
+                const fechaFormateada = formatDateToDDMMYYYY(document.getElementById('docFecha').value);
+                
+                // Calcular margen extra necesario para firmas
+                const maxSigHeight = getMaxSignatureHeight('sig-doc-entrevistado', 'sig-doc-entrevistador');
+                const extraMargin = Math.max(0, (maxSigHeight - 60) * 2);
+
+                contenido = `
+                    <table class="data-table">
+                        <tr><td class="label-cell">Docente:</td><td>${nombre}</td></tr>
+                        <tr><td class="label-cell">Curso/Asig:</td><td>${document.getElementById('docCurso').value}</td></tr>
+                        <tr><td class="label-cell">Fecha:</td><td>${fechaFormateada}</td></tr>
+                        <tr><td class="label-cell">Entrevistadores:</td><td>${entrevistadores}</td></tr>
+                    </table>
+                    <div class="section-box" style="margin-bottom: ${20 + extraMargin/2}px;">
+                        <span class="section-title">Motivo:</span>
+                        ${formatTextWithSize(document.getElementById('docMotivo').value, 'docMotivo', 'motivo')}
+                    </div>
+                    <div class="section-box" style="margin-bottom: ${20 + extraMargin/2}px;">
+                        <span class="section-title">Acuerdos:</span>
+                        ${formatTextWithSize(document.getElementById('docAcuerdos').value, 'docAcuerdos', 'acuerdos')}
+                    </div>
+                    <div class="signature-section" style="margin-top: ${40 + extraMargin}px;">
+                        <div class="signature-grid">
+                            <div class="signature-box">
+                                ${getSigHTML('sig-doc-entrevistado', nombre || 'Docente', 'doc')}
+                                Firma Docente
+                            </div>
+                            <div class="signature-box">
+                                ${getSigHTML('sig-doc-entrevistador', 'Entrevistador', 'doc')}
+                                Firma CCE
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            paperContent.innerHTML = `
+                <div class="pdf-header">
+                    <img src="${logo}" class="preview-logo">
+                    <div style="font-weight:bold; font-size:14pt;">${colegioNombre}</div>
+                    <div>${document.getElementById('colegioDireccion').value}</div>
+                    <div>${document.getElementById('colegioTelefono').value}</div>
+                </div>
+                <div class="pdf-title">${titulo}</div>
+                <div class="pdf-subtitle">${document.getElementById('comiteNombre').value}</div>
+                ${contenido}
+            `;
+        }
+
+        // --- 11. GESTIÓN DE FICHAS GUARDADAS ---
+        function updateFichaNombre() {
+            const tipo = document.getElementById('fichaTipo').value;
+            const input = document.getElementById('fichaNombre');
+            if(!input.value) {
+                if(tipo==='estudiante') input.value = document.getElementById('estNombre').value;
+                if(tipo==='apoderado') input.value = document.getElementById('apoNombre').value;
+                if(tipo==='docente') input.value = document.getElementById('docNombre').value;
+            }
+        }
+
+        function guardarFichaActual() {
+            const nombre = document.getElementById('fichaNombre').value;
+            if(!nombre) return alert("Ingrese un nombre");
+            saveAllData(); // Asegura estado actual
+            
+            const currentData = JSON.parse(localStorage.getItem('cceFichasData'));
+            const guardadas = JSON.parse(localStorage.getItem('cceFichasGuardadas') || '{}');
+            
+            guardadas[nombre] = { tipo: document.getElementById('fichaTipo').value, datos: currentData, fecha: new Date().toISOString() };
+            localStorage.setItem('cceFichasGuardadas', JSON.stringify(guardadas));
+            actualizarListaFichas();
+            alert("Guardado exitoso");
+        }
+
+        function actualizarListaFichas() {
+            const list = document.getElementById('fichasGuardadasList');
+            const guardadas = JSON.parse(localStorage.getItem('cceFichasGuardadas') || '{}');
+            list.innerHTML = '';
+            Object.keys(guardadas).forEach(key => {
+                const item = guardadas[key];
+                const div = document.createElement('div');
+                div.className = 'interviewer-item';
+                div.innerHTML = `
+                    <div style="flex:1"><strong>${key}</strong><br><small>${item.tipo} - ${new Date(item.fecha).toLocaleDateString()}</small></div>
+                    <button class="btn-mic" onclick="cargarFicha('${key}')"><i class="fas fa-upload"></i></button>
+                    <button class="btn-mic" onclick="eliminarFicha('${key}')"><i class="fas fa-trash"></i></button>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function cargarFicha(key) {
+            const guardadas = JSON.parse(localStorage.getItem('cceFichasGuardadas') || '{}');
+            if(guardadas[key]) {
+                localStorage.setItem('cceFichasData', JSON.stringify(guardadas[key].datos));
+                loadAllData();
+                document.getElementById('fichaTipo').value = guardadas[key].tipo;
+                switchTab(guardadas[key].tipo);
+                alert("Cargado: " + key);
+            }
+        }
+
+        function eliminarFicha(key) {
+            if(confirm("¿Eliminar "+key+"?")) {
+                const guardadas = JSON.parse(localStorage.getItem('cceFichasGuardadas') || '{}');
+                delete guardadas[key];
+                localStorage.setItem('cceFichasGuardadas', JSON.stringify(guardadas));
+                actualizarListaFichas();
+            }
+        }
+
+        function exportarTodasFichas() {
+            const data = {
+                logo: localStorage.getItem('cceLogo'),
+                logoGitHub: localStorage.getItem('cceLogoGitHub'),
+                githubConfig: localStorage.getItem('githubConfig'),
+                actual: JSON.parse(localStorage.getItem('cceFichasData')),
+                guardadas: JSON.parse(localStorage.getItem('cceFichasGuardadas'))
+            };
+            const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href=url; a.download=`respaldo_cce_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+        }
+
+        function importarFichas() {
+            const input = document.createElement('input'); input.type='file';
+            input.onchange = e => {
+                const reader = new FileReader();
+                reader.onload = ev => {
+                    const data = JSON.parse(ev.target.result);
+                    if(data.logo) localStorage.setItem('cceLogo', data.logo);
+                    if(data.logoGitHub) localStorage.setItem('cceLogoGitHub', data.logoGitHub);
+                    if(data.githubConfig) localStorage.setItem('githubConfig', data.githubConfig);
+                    if(data.actual) localStorage.setItem('cceFichasData', JSON.stringify(data.actual));
+                    if(data.guardadas) localStorage.setItem('cceFichasGuardadas', JSON.stringify(data.guardadas));
+                    location.reload();
+                };
+                reader.readAsText(e.target.files[0]);
+            };
+            input.click();
+        }
+
+        function enviarPorCorreo() {
+            alert("Descarga primero el PDF y luego adjúntalo al correo que se abrirá.");
+            const subject = "Ficha Entrevista CCE";
+            window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=Adjunto ficha.`;
+        }
+
+        // --- 12. ARRANQUE ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initPads(); // Iniciar firmas
+            
+            // Cargar configuración de GitHub
+            loadGithubConfig();
+            
+            // Cargar datos si existen
+            if(!loadAllData()) {
+                // Si no hay datos, asegurar que existan inputs de entrevistador
+                addEntrevistador('est'); addEntrevistador('apo'); addEntrevistador('doc');
+            }
+            
+            // Cargar logo: primero intentar desde GitHub, luego local
+            const logoGitHub = localStorage.getItem('cceLogoGitHub');
+            const logoLocal = localStorage.getItem('cceLogo');
+            
+            if (logoGitHub) {
+                document.getElementById('editorLogo').src = logoGitHub;
+                updateServerLogoPreview(logoGitHub);
+            } else if (logoLocal) {
+                document.getElementById('editorLogo').src = logoLocal;
+            }
+            
+            // Verificar logo en servidor
+            checkServerLogo();
+            
+            actualizarListaFichas();
+            calculateContentHeights();
+            updatePreview();
+        });
+
+    </script>
+</body>
+</html>
